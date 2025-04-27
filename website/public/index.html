@@ -1,10 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Flashcard App</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Learner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .flashcard {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 200px;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #card-front {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+        #card-back {
+            display: none;
+            color: #666;
+        }
+        .day-counter {
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+    </style>
 </head>
 <body>
-  <h1>Welcome to Flashcard Learner!</h1>
-  <p>Server is working correctly.</p>
+    <h1>Flashcard Learner</h1>
+    <div class="day-counter">Day 0</div>
+    
+    <div class="flashcard">
+        <div id="card-front">No cards available</div>
+        <div id="card-back"></div>
+    </div>
+    
+    <div class="controls">
+        <button id="show-answer">Show Answer</button>
+        <button id="next-card">Next Card</button>
+    </div>
+
+    <script src="/script.js"></script>
 </body>
 </html>
