@@ -1,34 +1,10 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Flashcard Extension</title>
-  <script src="popup.js" defer></script>
-
-  <!-- Inside popup.html <head> -->
-<style>
-    body {
-      width: 300px;
-      min-height: 200px;
-      padding: 15px;
-      font-family: Arial, sans-serif;
-    }
-    .card {
-      background: #f8f9fa;
-      border-left: 4px solid #8b60dc;
-      padding: 10px;
-      margin: 8px 0;
-      border-radius: 2px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }
-    h1 {
-      color: #000000;
-      font-size: 18px;
-      margin-top: 0;
-    }
-  </style>
-</head>
-<body>
-  <h1>Your Flashcards</h1>
-  <div id="flashcard-container"></div>
-</body>
-</html>
+<div id="flashcard-creator" style="width: 300px; padding: 15px;">
+    <h3>Create Flashcard</h3>
+    <input type="text" id="front" placeholder="Front (Title)"><br>
+    <textarea id="back" placeholder="Back (Content)"></textarea><br>
+    <input type="text" id="hint" placeholder="Hint (optional)"><br>
+    <button id="save">Save Card</button>
+    <button id="cancel">Cancel</button>
+  </div>
+  
+  <script src="popup.js"></script>
