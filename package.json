@@ -1,0 +1,11 @@
+{
+    "scripts": {
+        "dev:extension": "cd extension && tsc --watch",
+        "dev:webapp": "cd webapp && npm run dev",
+        "dev:server": "cd server && ts-node src/index.ts",
+        "build": "cd extension && tsc && cd ../webapp && npm run build"
+    },
+    "dependencies": {
+        "typescript": "^5.8.3"
+    }
+}
