@@ -1,4 +1,5 @@
-Flashcard Extension
+Flashcard Extension.
+
 A browser extension that allows users to create flashcards by highlighting text on webpages, saving them and using a webapp to learn from them. You use Hand gestures to validate if the flashcard was easy or difficult.
 
 ===========================================================================
