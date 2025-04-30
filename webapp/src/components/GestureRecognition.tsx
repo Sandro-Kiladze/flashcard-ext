@@ -15,13 +15,13 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const currentGesture = useRef<string | null>(null);
   const gestureStartTime = useRef<number | null>(null);
-  const HOLD_DURATION = 3000;
+  const HOLD_DURATION = 800; // Reduced to 0.8 seconds
   const STABLE_FRAMES_REQUIRED = 5;
   const lastStableGesture = useRef<string | null>(null);
   const gestureStableCount = useRef<number>(0);
   const currentGestureRef = useRef<string | null>(null);
   const lastGestureTime = useRef<number>(Date.now());
-  const GRACE_PERIOD = 1000; // 1 second grace period for small movements
+  const GRACE_PERIOD = 800; // 800ms grace period for small movements
 
   useEffect(() => {
     if (!isActive) {
@@ -97,7 +97,8 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
         if (ctx) {
           ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
           ctx.font = '24px Arial';
-          
+          ctx.textAlign = 'center';
+
           // Draw reference line
           ctx.strokeStyle = 'rgba(255,255,255,0.3)';
           ctx.beginPath();
@@ -110,27 +111,32 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
             const currentGesture = detectGesture(predictions[0]);
             const currentTime = Date.now();
 
-            // Give user 1 second grace period to adjust hand
-            if (currentGesture && (currentTime - lastGestureTime.current < GRACE_PERIOD || 
-                currentGesture === currentGestureRef.current)) {
-              
-              if (!currentGestureRef.current) {
+            if (currentGesture) {
+              if (!currentGestureRef.current || currentGesture !== currentGestureRef.current) {
                 // New gesture detected
                 currentGestureRef.current = currentGesture;
                 gestureStartTime.current = currentTime;
-                setStatus(`Hold ${currentGesture.replace('_', ' ')}...`);
-              } 
-              else {
+                setStatus(`Hold ${currentGesture.replace('_', ' ')}... (1.5s)`);
+                
+                // Visual cue for the required gesture
+                drawGestureHint(currentGesture);
+              } else {
                 // Same gesture continuing
                 const elapsed = currentTime - (gestureStartTime.current || 0);
-                const remaining = Math.max(0, HOLD_DURATION - elapsed);
                 
-                // Visual feedback with progress bar
-                const progressWidth = (elapsed / HOLD_DURATION) * canvasRef.current.width;
-                ctx.fillStyle = 'rgba(76, 175, 80, 0.7)';
-                ctx.fillRect(0, 0, progressWidth, 10);
-                ctx.strokeStyle = 'white';
-                ctx.strokeRect(0, 0, canvasRef.current.width, 10);
+                // Visual feedback - growing circle with color
+                const progress = Math.min(1, elapsed / HOLD_DURATION);
+                const centerX = canvasRef.current.width / 2;
+                const centerY = canvasRef.current.height / 2;
+                
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 20 + (progress * 30), 0, 2 * Math.PI);
+                ctx.fillStyle = currentGesture === 'open_palm' ? 
+                  `rgba(0, 100, 255, ${0.4 + (progress * 0.6)})` :
+                  currentGesture === 'thumbs_up' ? 
+                  `rgba(0, 200, 0, ${0.4 + (progress * 0.6)})` :
+                  `rgba(200, 0, 0, ${0.4 + (progress * 0.6)})`;
+                ctx.fill();
                 
                 if (elapsed >= HOLD_DURATION) {
                   onGestureDetected(currentGesture);
@@ -145,7 +151,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
                   ctx.fillText(
                     currentGesture === 'thumbs_up' ? '👍 Detected!' :
                     currentGesture === 'thumbs_down' ? '👎 Detected!' : '✋ Detected!',
-                    10, 30
+                    centerX, 30
                   );
                   
                   // Haptic feedback
@@ -153,7 +159,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
                   
                   setTimeout(() => setStatus('Show your hand!'), 2000);
                 } else {
-                  setStatus(`Keep holding... ${Math.ceil(remaining/1000)}s`);
+                  setStatus(`Keep holding... ${(1.5 - (elapsed/1000)).toFixed(1)}s`);
                 }
               }
             } else {
@@ -161,7 +167,6 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
               gestureStartTime.current = null;
               setStatus('Hold gesture steady...');
             }
-            lastGestureTime.current = currentTime;
           } else {
             setIsHandDetected(false);
             currentGestureRef.current = null;
@@ -198,36 +203,69 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
       const thumbY = thumbTip[1] - wrist[1];
       const indexY = indexTip[1] - wrist[1];
       const middleY = middleTip[1] - wrist[1];
+      const ringY = ringTip[1] - wrist[1];
       const pinkyY = pinkyTip[1] - wrist[1];
+
+      // Calculate distances
       const thumbIndexDist = Math.sqrt(
         Math.pow(thumbTip[0] - indexTip[0], 2) + 
         Math.pow(thumbTip[1] - indexTip[1], 2)
       );
+      const handSpread = Math.abs(indexTip[0] - pinkyTip[0]);
 
-      // More forgiving thumbs up detection
-      if (thumbY < -50 &&            // Thumb above wrist
-          thumbIndexDist > 80 &&     // Thumb separated from fingers
-          indexY < 0 &&              // Fingers not below wrist
-          middleY < 0) {
+      // 1. THUMBS UP DETECTION - More forgiving
+      if (thumbY < -40 &&            // Thumb above wrist
+          thumbIndexDist > 70 &&     // Thumb separated from fingers
+          indexY < 10 &&             // Fingers not too low
+          middleY < 10) {
         return 'thumbs_up';
       }
 
-      // More forgiving thumbs down detection
-      if (thumbY > 30 &&             // Thumb below wrist
-          thumbIndexDist > 60 &&     // Thumb separated from fingers
-          indexY > 0 &&              // Fingers below wrist
-          middleY > 0) {
+      // 2. THUMBS DOWN DETECTION - More forgiving
+      if (thumbY > 20 &&             // Thumb below wrist
+          thumbIndexDist > 50 &&     // Thumb separated from fingers
+          indexY > -20 &&            // Fingers not too high
+          middleY > -20) {
         return 'thumbs_down';
       }
 
-      // More forgiving open palm detection
-      if (Math.abs(thumbY) < 60 &&   // Thumb near wrist level
-          Math.abs(indexY) < 60 &&   // Fingers near wrist level
-          thumbIndexDist > 100) {    // Hand is open
-        return 'open_palm';
+      // 3. OPEN PALM DETECTION - More forgiving
+      const fingersUp = indexY < -30 && middleY < -30 && ringY < -30 && pinkyY < -30;
+      const thumbOut = thumbIndexDist > 100;
+      const fingersSpread = handSpread > 120;
+      
+      if (fingersUp && thumbOut && fingersSpread) {
+        // Check fingertip alignment with more tolerance
+        const fingertips = [indexTip, middleTip, ringTip, pinkyTip];
+        const tipHeights = fingertips.map(tip => tip[1]);
+        const heightDiff = Math.max(...tipHeights) - Math.min(...tipHeights);
+        
+        if (heightDiff < 80) {  // More tolerant alignment check
+          return 'open_palm';
+        }
       }
 
       return null;
+    }
+
+    function drawGestureHint(gesture: string) {
+      const ctx = canvasRef.current?.getContext('2d');
+      if (!ctx) return;
+
+      ctx.font = '24px Arial';
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      
+      // Clear previous text
+      ctx.clearRect(0, 0, canvasRef.current?.width || 0, 50);
+      
+      if (gesture === 'open_palm') {
+        ctx.fillText('✋ Hold hand flat and open', canvasRef.current?.width ? canvasRef.current.width/2 : 0, 30);
+      } else if (gesture === 'thumbs_up') {
+        ctx.fillText('👍 Hold thumb up', canvasRef.current?.width ? canvasRef.current.width/2 : 0, 30);
+      } else {
+        ctx.fillText('👎 Hold thumb down', canvasRef.current?.width ? canvasRef.current.width/2 : 0, 30);
+      }
     }
 
     async function initialize() {
@@ -282,7 +320,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
         </div>
       </div>
       <div className="instructions">
-        <p>Hold your gesture for 3 seconds to confirm:</p>
+        <p>Hold your gesture for 1.5 seconds to confirm:</p>
         <div className="gesture-info">
           <div>👍 Thumbs Up = Easy</div>
           <div>👎 Thumbs Down = Hard</div>
