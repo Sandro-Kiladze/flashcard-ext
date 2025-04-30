@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import GestureRecognition from './components/GestureRecognition';
+import './styles/gesture.css';
 
 interface Flashcard {
   front: string;
@@ -9,6 +11,7 @@ export default function App() {
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [isGestureActive, setIsGestureActive] = useState(false);
 
   useEffect(() => {
     fetch('http://localhost:3000/flashcards')
@@ -19,11 +22,50 @@ export default function App() {
   const goToNextCard = () => {
     setCurrentIndex(prev => (prev + 1) % cards.length);
     setShowAnswer(false);
+    setIsGestureActive(false);
   };
 
   const goToPrevCard = () => {
     setCurrentIndex(prev => (prev - 1 + cards.length) % cards.length);
     setShowAnswer(false);
+    setIsGestureActive(false);
+  };
+
+  const handleGestureDetected = (gesture: string) => {
+    if (!showAnswer) return;
+
+    let difficulty = '';
+    switch (gesture) {
+      case 'thumbs_up':
+        difficulty = 'Easy';
+        break;
+      case 'thumbs_down':
+        difficulty = 'Hard';
+        break;
+      case 'open_palm':
+        difficulty = 'Incorrect';
+        break;
+    }
+
+    if (difficulty) {
+      // Update the flashcard with the difficulty rating
+      const updatedCards = [...cards];
+      updatedCards[currentIndex] = {
+        ...updatedCards[currentIndex],
+        front: `${updatedCards[currentIndex].front} (${difficulty})`
+      };
+      setCards(updatedCards);
+
+      // Save the updated flashcard to the server
+      fetch(`http://localhost:3000/flashcards/${currentIndex}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCards[currentIndex])
+      }).catch(err => console.error('Error updating flashcard:', err));
+
+      // Move to next card
+      goToNextCard();
+    }
   };
 
   return (
@@ -46,7 +88,10 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div>
               <button 
-                onClick={() => setShowAnswer(!showAnswer)}
+                onClick={() => {
+                  setShowAnswer(!showAnswer);
+                  setIsGestureActive(!showAnswer);
+                }}
                 style={{ padding: '10px 20px', marginRight: '10px' }}
               >
                 {showAnswer ? 'Hide Answer' : 'Show Answer'}
@@ -75,6 +120,11 @@ export default function App() {
           <p style={{ marginTop: '20px', textAlign: 'center' }}>
             Card {currentIndex + 1} of {cards.length}
           </p>
+
+          <GestureRecognition 
+            onGestureDetected={handleGestureDetected}
+            isActive={isGestureActive}
+          />
         </>
       ) : (
         <p>No flashcards yet. Highlight text on any page and click the extension button!</p>
