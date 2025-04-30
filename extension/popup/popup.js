@@ -2,25 +2,24 @@
 const params = new URLSearchParams(window.location.search);
 document.getElementById('back').value = params.get('text') || '';
 
+// Button handlers
+document.getElementById('cancel').addEventListener('click', () => window.close());
+
 document.getElementById('save').addEventListener('click', async () => {
-  const card = {
+  const flashcard = {
     front: document.getElementById('front').value,
-    back: document.getElementById('back').value,
-    hint: document.getElementById('hint').value,
-    createdAt: new Date().toISOString()
+    back: document.getElementById('back').value
   };
 
   try {
-    const response = await fetch('http://localhost:3000/cards', {
+    const response = await fetch('http://localhost:3000/flashcards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(card)
+      body: JSON.stringify(flashcard)
     });
     
     if (response.ok) window.close();
-  } catch (error) {
-    console.error('Save failed:', error);
+  } catch (err) {
+    console.error('Save failed:', err);
   }
 });
-
-document.getElementById('cancel').addEventListener('click', () => window.close());
