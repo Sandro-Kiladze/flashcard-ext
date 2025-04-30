@@ -16,6 +16,12 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
   const currentGesture = useRef<string | null>(null);
   const gestureStartTime = useRef<number | null>(null);
   const HOLD_DURATION = 3000;
+  const STABLE_FRAMES_REQUIRED = 5;
+  const lastStableGesture = useRef<string | null>(null);
+  const gestureStableCount = useRef<number>(0);
+  const currentGestureRef = useRef<string | null>(null);
+  const lastGestureTime = useRef<number>(Date.now());
+  const GRACE_PERIOD = 1000; // 1 second grace period for small movements
 
   useEffect(() => {
     if (!isActive) {
@@ -28,6 +34,9 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
       setIsHandDetected(false);
       currentGesture.current = null;
       gestureStartTime.current = null;
+      lastStableGesture.current = null;
+      gestureStableCount.current = 0;
+      currentGestureRef.current = null;
       return;
     }
 
@@ -89,71 +98,76 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
           ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
           ctx.font = '24px Arial';
           
+          // Draw reference line
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+          ctx.beginPath();
+          ctx.moveTo(0, canvasRef.current.height/2);
+          ctx.lineTo(canvasRef.current.width, canvasRef.current.height/2);
+          ctx.stroke();
+          
           if (predictions.length > 0) {
             setIsHandDetected(true);
-            const gesture = detectGesture(predictions[0]);
-            
-            if (gesture) {
-              const currentTime = Date.now();
+            const currentGesture = detectGesture(predictions[0]);
+            const currentTime = Date.now();
+
+            // Give user 1 second grace period to adjust hand
+            if (currentGesture && (currentTime - lastGestureTime.current < GRACE_PERIOD || 
+                currentGesture === currentGestureRef.current)) {
               
-              // First detection of this gesture
-              if (currentGesture.current !== gesture) {
-                currentGesture.current = gesture;
+              if (!currentGestureRef.current) {
+                // New gesture detected
+                currentGestureRef.current = currentGesture;
                 gestureStartTime.current = currentTime;
+                setStatus(`Hold ${currentGesture.replace('_', ' ')}...`);
               } 
-              // Same gesture continuing
               else {
+                // Same gesture continuing
                 const elapsed = currentTime - (gestureStartTime.current || 0);
+                const remaining = Math.max(0, HOLD_DURATION - elapsed);
                 
-                // Update status with countdown
-                setStatus(`${gesture.replace('_', ' ')} - ${Math.ceil((HOLD_DURATION - elapsed)/1000)}s`);
+                // Visual feedback with progress bar
+                const progressWidth = (elapsed / HOLD_DURATION) * canvasRef.current.width;
+                ctx.fillStyle = 'rgba(76, 175, 80, 0.7)';
+                ctx.fillRect(0, 0, progressWidth, 10);
+                ctx.strokeStyle = 'white';
+                ctx.strokeRect(0, 0, canvasRef.current.width, 10);
                 
-                // Draw countdown progress
-                const progress = Math.min(1, elapsed / HOLD_DURATION);
-                ctx.strokeStyle = '#4CAF50';
-                ctx.lineWidth = 8;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.arc(50, 50, 30, 0, 2 * Math.PI * progress);
-                ctx.stroke();
-                
-                // Gesture held long enough
                 if (elapsed >= HOLD_DURATION) {
-                  onGestureDetected(gesture);
+                  onGestureDetected(currentGesture);
                   gestureStartTime.current = null;
-                  currentGesture.current = null;
+                  currentGestureRef.current = null;
+                  lastStableGesture.current = null;
+                  gestureStableCount.current = 0;
                   
-                  // Add haptic feedback
-                  if (navigator.vibrate) {
-                    navigator.vibrate(200); // 200ms vibration
-                  }
+                  // Visual feedback
+                  ctx.fillStyle = currentGesture === 'thumbs_up' ? 'green' : 
+                                 currentGesture === 'thumbs_down' ? 'red' : 'blue';
+                  ctx.fillText(
+                    currentGesture === 'thumbs_up' ? '👍 Detected!' :
+                    currentGesture === 'thumbs_down' ? '👎 Detected!' : '✋ Detected!',
+                    10, 30
+                  );
                   
-                  // Draw confirmation
-                  if (gesture === 'thumbs_up') {
-                    ctx.fillStyle = 'green';
-                    ctx.fillText('👍 Detected!', 10, 30);
-                  } else if (gesture === 'thumbs_down') {
-                    ctx.fillStyle = 'red';
-                    ctx.fillText('👎 Detected!', 10, 30);
-                  } else if (gesture === 'open_palm') {
-                    ctx.fillStyle = 'blue';
-                    ctx.fillText('✋ Detected!', 10, 30);
-                  }
+                  // Haptic feedback
+                  if (navigator.vibrate) navigator.vibrate(200);
                   
-                  setTimeout(() => {
-                    setStatus('Show your hand!');
-                  }, 2000);
+                  setTimeout(() => setStatus('Show your hand!'), 2000);
+                } else {
+                  setStatus(`Keep holding... ${Math.ceil(remaining/1000)}s`);
                 }
               }
             } else {
-              currentGesture.current = null;
+              currentGestureRef.current = null;
               gestureStartTime.current = null;
-              setStatus('Show your hand!');
+              setStatus('Hold gesture steady...');
             }
+            lastGestureTime.current = currentTime;
           } else {
             setIsHandDetected(false);
-            currentGesture.current = null;
+            currentGestureRef.current = null;
             gestureStartTime.current = null;
+            lastStableGesture.current = null;
+            gestureStableCount.current = 0;
             setStatus('Show your hand!');
           }
         }
@@ -170,7 +184,6 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
 
     function detectGesture(prediction: handpose.AnnotatedPrediction) {
       const landmarks = prediction.landmarks;
-      
       if (!landmarks || landmarks.length < 21) return null;
 
       // Key landmarks
@@ -181,58 +194,37 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
       const ringTip = landmarks[16];
       const pinkyTip = landmarks[20];
 
-      // Calculate vertical positions relative to wrist (Y coordinates)
+      // Calculate positions relative to wrist
       const thumbY = thumbTip[1] - wrist[1];
       const indexY = indexTip[1] - wrist[1];
       const middleY = middleTip[1] - wrist[1];
-      const ringY = ringTip[1] - wrist[1];
       const pinkyY = pinkyTip[1] - wrist[1];
-
-      // Calculate horizontal spread between index and pinky (X coordinates)
-      const handSpread = Math.abs(indexTip[0] - pinkyTip[0]);
-
-      // Calculate distances between thumb and index fingertips
       const thumbIndexDist = Math.sqrt(
         Math.pow(thumbTip[0] - indexTip[0], 2) + 
         Math.pow(thumbTip[1] - indexTip[1], 2)
       );
 
-      // Debug output (keep this for testing)
-      console.log('Landmark Positions:');
-      console.log('Thumb Y:', thumbY, 'Index Y:', indexY, 'Middle Y:', middleY);
-      console.log('Ring Y:', ringY, 'Pinky Y:', pinkyY);
-      console.log('Wrist Position:', wrist);
-      console.log('Hand Spread:', handSpread);
-      console.log('Thumb-Index Distance:', thumbIndexDist);
-
-      // Thumbs Up Detection (based on console output)
-      if (thumbY < -150 &&            // Thumb is significantly above wrist
-          indexY < -50 &&             // Fingers are above wrist
-          middleY < -30 &&
-          thumbIndexDist > 100 &&     // Thumb is separated from index finger
-          pinkyY > 10) {             // Pinky is below wrist (natural curl)
-        return 'thumbs_up'; // Easy
+      // More forgiving thumbs up detection
+      if (thumbY < -50 &&            // Thumb above wrist
+          thumbIndexDist > 80 &&     // Thumb separated from fingers
+          indexY < 0 &&              // Fingers not below wrist
+          middleY < 0) {
+        return 'thumbs_up';
       }
 
-      // Thumbs Down Detection (based on new data)
-      if (thumbY > 35 &&              // Thumb below wrist (data shows ~40-44)
-          indexY > 35 &&              // Fingers below wrist
-          middleY > 25 &&
-          thumbIndexDist > 80 &&      // Thumb separated from index
-          pinkyY < -5) {             // Pinky curled up
-        return 'thumbs_down'; // Hard
+      // More forgiving thumbs down detection
+      if (thumbY > 30 &&             // Thumb below wrist
+          thumbIndexDist > 60 &&     // Thumb separated from fingers
+          indexY > 0 &&              // Fingers below wrist
+          middleY > 0) {
+        return 'thumbs_down';
       }
 
-      // Open Palm Detection
-      const fingerSpread = 
-        Math.abs(indexY - middleY) + 
-        Math.abs(middleY - ringY) + 
-        Math.abs(ringY - pinkyY);
-      
-      if (fingerSpread < 80 &&        // Fingers are close together vertically
-          thumbIndexDist < 80 &&      // Thumb is close to index finger
-          handSpread > 150) {         // Hand is wide open
-        return 'open_palm'; // Incorrect
+      // More forgiving open palm detection
+      if (Math.abs(thumbY) < 60 &&   // Thumb near wrist level
+          Math.abs(indexY) < 60 &&   // Fingers near wrist level
+          thumbIndexDist > 100) {    // Hand is open
+        return 'open_palm';
       }
 
       return null;
