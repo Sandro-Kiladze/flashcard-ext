@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import * as tf from '@tensorflow/tfjs';
 import * as handpose from '@tensorflow-models/handpose';
-import '@tensorflow/tfjs';
+import '@tensorflow/tfjs-backend-webgl';
 
 interface GestureRecognitionProps {
   onGestureDetected: (gesture: string) => void;
@@ -9,236 +10,269 @@ interface GestureRecognitionProps {
 
 export default function GestureRecognition({ onGestureDetected, isActive }: GestureRecognitionProps) {
   const [status, setStatus] = useState('Initializing...');
-  const [model, setModel] = useState<handpose.HandPose | null>(null);
   const [isHandDetected, setIsHandDetected] = useState(false);
-  const [fps, setFps] = useState(0);
-  
-  // Properly initialized refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const currentGesture = useRef<string | null>(null);
   const gestureStartTime = useRef<number | null>(null);
-  const frameCount = useRef<number>(0);
-  const lastFpsUpdate = useRef<number>(performance.now());
-  const animationRef = useRef<number | null>(null);
-  
-  const HOLD_DURATION = 3000; // 3 seconds
-  const DETECTION_INTERVAL = 100; // Check for hand every 100ms
+  const HOLD_DURATION = 3000;
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive) {
+      // Clean up when inactive
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+      setIsHandDetected(false);
+      currentGesture.current = null;
+      gestureStartTime.current = null;
+      return;
+    }
 
-    async function init() {
+    let model: handpose.HandPose;
+    let stream: MediaStream;
+    let animationFrameId: number;
+    let isRunning = true;
+
+    async function setupCamera() {
       try {
-        console.log('Initializing camera...');
-        // Request camera access with better quality settings
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            facingMode: 'user'
-          } 
+        setStatus('Setting up camera...');
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: 'user' }
         });
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          await new Promise((resolve) => {
+            if (videoRef.current) {
+              videoRef.current.onloadedmetadata = resolve;
+            }
+          });
           await videoRef.current.play();
-          console.log('Camera initialized successfully');
-          
-          if (canvasRef.current) {
-            canvasRef.current.width = videoRef.current.videoWidth;
-            canvasRef.current.height = videoRef.current.videoHeight;
-          }
         }
-        
-        // Load the handpose model with better configuration
-        setStatus('Loading model...');
-        console.log('Loading handpose model...');
-        const handposeModel = await handpose.load({
-          maxContinuousChecks: 5,
-          detectionConfidence: 0.7, // Lowered for better detection
-          iouThreshold: 0.3,
-          scoreThreshold: 0.5 // Lowered for better detection
-        });
-        setModel(handposeModel);
-        console.log('Handpose model loaded successfully');
-        setStatus('Model loaded. Show your hand!');
-        
-        // Start detection loop
-        detectGestures();
       } catch (err) {
-        console.error('Error during initialization:', err);
-        setStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        console.error('Camera error:', err);
+        setStatus('Camera access denied');
       }
     }
 
-    init();
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+    async function loadModel() {
+      try {
+        setStatus('Loading model...');
+        await tf.setBackend('webgl');
+        await tf.ready();
+        console.log('TensorFlow.js backend:', tf.getBackend());
+        model = await handpose.load({
+          maxContinuousChecks: 3,
+          detectionConfidence: 0.8
+        });
+        setStatus('Ready - Show your hand');
+      } catch (err) {
+        console.error('Model loading error:', err);
+        setStatus('Model failed to load');
       }
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [isActive]);
+    }
 
-  async function detectGestures() {
-    if (!model || !videoRef.current || !canvasRef.current || !isActive) return;
-
-    try {
-      // Update FPS counter
-      frameCount.current++;
-      if (frameCount.current - lastFpsUpdate.current > 1000) {
-        setFps(Math.round((frameCount.current * 1000) / (frameCount.current - lastFpsUpdate.current)));
-        lastFpsUpdate.current = frameCount.current;
+    async function detectHands() {
+      if (!isRunning || !model || !videoRef.current || !canvasRef.current) {
+        return;
       }
 
-      const predictions = await model.estimateHands(videoRef.current);
-      console.log('Hand predictions:', predictions.length);
-      
-      const ctx = canvasRef.current?.getContext('2d');
-      if (ctx && canvasRef.current) {
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      try {
+        tf.engine().startScope();
+        const predictions = await model.estimateHands(videoRef.current);
         
-        if (predictions.length > 0) {
-          const landmarks = predictions[0].landmarks;
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          ctx.font = '24px Arial';
           
-          // Draw landmarks
-          ctx.fillStyle = 'red';
-          landmarks.forEach(landmark => {
-            ctx.beginPath();
-            ctx.arc(landmark[0], landmark[1], 5, 0, 2 * Math.PI);
-            ctx.fill();
-          });
-
-          // Draw connections
-          ctx.strokeStyle = 'white';
-          ctx.lineWidth = 2;
-          const connections = [
-            [0, 1, 2, 3, 4],         // Thumb
-            [0, 5, 6, 7, 8],         // Index finger
-            [0, 9, 10, 11, 12],      // Middle finger
-            [0, 13, 14, 15, 16],    // Ring finger
-            [0, 17, 18, 19, 20],     // Pinky
-            [5, 9, 13, 17, 0]        // Palm base
-          ];
-          
-          connections.forEach(polygon => {
-            ctx.beginPath();
-            polygon.forEach((pointIdx, i) => {
-              const point = landmarks[pointIdx];
-              if (i === 0) {
-                ctx.moveTo(point[0], point[1]);
-              } else {
-                ctx.lineTo(point[0], point[1]);
+          if (predictions.length > 0) {
+            setIsHandDetected(true);
+            const gesture = detectGesture(predictions[0]);
+            
+            if (gesture) {
+              const currentTime = Date.now();
+              
+              // First detection of this gesture
+              if (currentGesture.current !== gesture) {
+                currentGesture.current = gesture;
+                gestureStartTime.current = currentTime;
+              } 
+              // Same gesture continuing
+              else {
+                const elapsed = currentTime - (gestureStartTime.current || 0);
+                
+                // Update status with countdown
+                setStatus(`${gesture.replace('_', ' ')} - ${Math.ceil((HOLD_DURATION - elapsed)/1000)}s`);
+                
+                // Draw countdown progress
+                const progress = Math.min(1, elapsed / HOLD_DURATION);
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 8;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.arc(50, 50, 30, 0, 2 * Math.PI * progress);
+                ctx.stroke();
+                
+                // Gesture held long enough
+                if (elapsed >= HOLD_DURATION) {
+                  onGestureDetected(gesture);
+                  gestureStartTime.current = null;
+                  currentGesture.current = null;
+                  
+                  // Add haptic feedback
+                  if (navigator.vibrate) {
+                    navigator.vibrate(200); // 200ms vibration
+                  }
+                  
+                  // Draw confirmation
+                  if (gesture === 'thumbs_up') {
+                    ctx.fillStyle = 'green';
+                    ctx.fillText('👍 Detected!', 10, 30);
+                  } else if (gesture === 'thumbs_down') {
+                    ctx.fillStyle = 'red';
+                    ctx.fillText('👎 Detected!', 10, 30);
+                  } else if (gesture === 'open_palm') {
+                    ctx.fillStyle = 'blue';
+                    ctx.fillText('✋ Detected!', 10, 30);
+                  }
+                  
+                  setTimeout(() => {
+                    setStatus('Show your hand!');
+                  }, 2000);
+                }
               }
-            });
-            ctx.stroke();
-          });
-        }
-      }
-      
-      if (predictions.length > 0) {
-        setIsHandDetected(true);
-        const gesture = detectGesture(predictions[0]);
-        console.log('Detected gesture:', gesture);
-        
-        if (gesture) {
-          if (currentGesture.current === gesture) {
-            if (!gestureStartTime.current) {
-              gestureStartTime.current = Date.now();
-            } else if (Date.now() - gestureStartTime.current >= HOLD_DURATION) {
-              onGestureDetected(gesture);
+            } else {
+              currentGesture.current = null;
               gestureStartTime.current = null;
-              setStatus(`Gesture detected: ${gesture}`);
-              setTimeout(() => {
-                setStatus('Show your hand!');
-              }, 2000);
+              setStatus('Show your hand!');
             }
           } else {
-            currentGesture.current = gesture;
-            gestureStartTime.current = Date.now();
+            setIsHandDetected(false);
+            currentGesture.current = null;
+            gestureStartTime.current = null;
+            setStatus('Show your hand!');
           }
-        } else {
-          currentGesture.current = null;
-          gestureStartTime.current = null;
         }
-      } else {
-        setIsHandDetected(false);
-        currentGesture.current = null;
-        gestureStartTime.current = null;
+      } catch (err) {
+        console.error('Detection error:', err);
+        setStatus('Error detecting hand. Please try again.');
+      } finally {
+        tf.engine().endScope();
+        if (isRunning) {
+          animationFrameId = requestAnimationFrame(detectHands);
+        }
       }
-    } catch (err) {
-      console.error('Error detecting gestures:', err);
-      setStatus('Error detecting hand. Please try again.');
     }
-    
-    setTimeout(() => requestAnimationFrame(detectGestures), DETECTION_INTERVAL);
-  }
 
-  function detectGesture(prediction: handpose.AnnotatedPrediction) {
-    const landmarks = prediction.landmarks;
-    console.log('Hand confidence:', prediction.handInViewConfidence);
-    
-    // Get thumb and index finger positions
-    const thumbTip = landmarks[4];
-    const indexTip = landmarks[8];
-    const middleTip = landmarks[12];
-    const ringTip = landmarks[16];
-    const pinkyTip = landmarks[20];
-    const wrist = landmarks[0];
-    
-    // Calculate distances with improved thresholds
-    const thumbToWrist = Math.abs(thumbTip[1] - wrist[1]);
-    const indexToWrist = Math.abs(indexTip[1] - wrist[1]);
-    const middleToWrist = Math.abs(middleTip[1] - wrist[1]);
-    const ringToWrist = Math.abs(ringTip[1] - wrist[1]);
-    const pinkyToWrist = Math.abs(pinkyTip[1] - wrist[1]);
-    
-    // Thumbs up detection with improved thresholds
-    if (thumbToWrist > indexToWrist * 1.2 && 
-        thumbToWrist > middleToWrist * 1.2 &&
-        indexToWrist < middleToWrist * 0.8) {
-      return 'thumbs_up';
+    function detectGesture(prediction: handpose.AnnotatedPrediction) {
+      const landmarks = prediction.landmarks;
+      
+      if (!landmarks || landmarks.length < 21) return null;
+
+      // Key landmarks
+      const wrist = landmarks[0];
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const middleTip = landmarks[12];
+      const ringTip = landmarks[16];
+      const pinkyTip = landmarks[20];
+
+      // Calculate vertical positions relative to wrist (Y coordinates)
+      const thumbY = thumbTip[1] - wrist[1];
+      const indexY = indexTip[1] - wrist[1];
+      const middleY = middleTip[1] - wrist[1];
+      const ringY = ringTip[1] - wrist[1];
+      const pinkyY = pinkyTip[1] - wrist[1];
+
+      // Calculate horizontal spread between index and pinky (X coordinates)
+      const handSpread = Math.abs(indexTip[0] - pinkyTip[0]);
+
+      // Calculate distances between thumb and index fingertips
+      const thumbIndexDist = Math.sqrt(
+        Math.pow(thumbTip[0] - indexTip[0], 2) + 
+        Math.pow(thumbTip[1] - indexTip[1], 2)
+      );
+
+      // Debug output (keep this for testing)
+      console.log('Landmark Positions:');
+      console.log('Thumb Y:', thumbY, 'Index Y:', indexY, 'Middle Y:', middleY);
+      console.log('Ring Y:', ringY, 'Pinky Y:', pinkyY);
+      console.log('Wrist Position:', wrist);
+      console.log('Hand Spread:', handSpread);
+      console.log('Thumb-Index Distance:', thumbIndexDist);
+
+      // Thumbs Up Detection (based on console output)
+      if (thumbY < -150 &&            // Thumb is significantly above wrist
+          indexY < -50 &&             // Fingers are above wrist
+          middleY < -30 &&
+          thumbIndexDist > 100 &&     // Thumb is separated from index finger
+          pinkyY > 10) {             // Pinky is below wrist (natural curl)
+        return 'thumbs_up'; // Easy
+      }
+
+      // Thumbs Down Detection (based on new data)
+      if (thumbY > 35 &&              // Thumb below wrist (data shows ~40-44)
+          indexY > 35 &&              // Fingers below wrist
+          middleY > 25 &&
+          thumbIndexDist > 80 &&      // Thumb separated from index
+          pinkyY < -5) {             // Pinky curled up
+        return 'thumbs_down'; // Hard
+      }
+
+      // Open Palm Detection
+      const fingerSpread = 
+        Math.abs(indexY - middleY) + 
+        Math.abs(middleY - ringY) + 
+        Math.abs(ringY - pinkyY);
+      
+      if (fingerSpread < 80 &&        // Fingers are close together vertically
+          thumbIndexDist < 80 &&      // Thumb is close to index finger
+          handSpread > 150) {         // Hand is wide open
+        return 'open_palm'; // Incorrect
+      }
+
+      return null;
     }
-    
-    // Thumbs down detection with improved thresholds
-    if (thumbToWrist < indexToWrist * 0.7 && 
-        thumbToWrist < middleToWrist * 0.7 &&
-        indexToWrist < middleToWrist * 0.8) {
-      return 'thumbs_down';
+
+    async function initialize() {
+      await setupCamera();
+      await loadModel();
+      if (isRunning) {
+        detectHands();
+      }
     }
-    
-    // Open palm detection with improved thresholds
-    if (indexToWrist > middleToWrist * 0.85 &&
-        middleToWrist > ringToWrist * 0.85 &&
-        ringToWrist > pinkyToWrist * 0.85) {
-      return 'open_palm';
-    }
-    
-    return null;
-  }
+
+    initialize();
+
+    return () => {
+      isRunning = false;
+      cancelAnimationFrame(animationFrameId);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (videoRef.current?.srcObject) {
+        const videoStream = videoRef.current.srcObject as MediaStream;
+        videoStream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+      tf.disposeVariables();
+    };
+  }, [isActive]);
 
   if (!isActive) return null;
 
   return (
-    <div style={{ position: 'relative', width: '100%', maxWidth: '640px', margin: '0 auto' }}>
-      <div style={{ position: 'relative' }}>
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            transform: 'scaleX(-1)',
-            width: '100%',
-            height: 'auto',
-            display: 'block',
-            borderRadius: '8px'
-          }}
+    <div className="gesture-recognition">
+      <div className="video-container">
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          style={{ transform: 'scaleX(-1)' }}
         />
         <canvas
           ref={canvasRef}
@@ -248,55 +282,19 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
             left: 0,
             width: '100%',
             height: '100%',
-            transform: 'scaleX(-1)',
-            pointerEvents: 'none'
+            transform: 'scaleX(-1)'
           }}
         />
+        <div className={`status ${isHandDetected ? 'hand-detected' : ''}`}>
+          {status}
+        </div>
       </div>
-      
-      <div style={{
-        position: 'absolute',
-        bottom: '10px',
-        left: '10px',
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '8px 12px',
-        borderRadius: '4px',
-        fontSize: '14px',
-        zIndex: 10
-      }}>
-        <div>Status: {status}</div>
-        <div>FPS: {fps}</div>
-        <div>Hand detected: {isHandDetected ? '✅' : '❌'}</div>
-        {currentGesture.current && gestureStartTime.current && (
-          <div>
-            Detected: {currentGesture.current} - 
-            Hold for {Math.ceil((HOLD_DURATION - (Date.now() - gestureStartTime.current)) / 1000)}s
-          </div>
-        )}
-      </div>
-      
-      <div style={{ 
-        marginTop: '10px',
-        padding: '10px',
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        borderRadius: '8px',
-        textAlign: 'center'
-      }}>
-        <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>Gesture Guide:</p>
-        <div style={{ display: 'flex', justifyContent: 'space-around' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div>👍</div>
-            <div>Thumbs Up</div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div>👎</div>
-            <div>Thumbs Down</div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div>✋</div>
-            <div>Open Palm</div>
-          </div>
+      <div className="instructions">
+        <p>Hold your gesture for 3 seconds to confirm:</p>
+        <div className="gesture-info">
+          <div>👍 Thumbs Up = Easy</div>
+          <div>👎 Thumbs Down = Hard</div>
+          <div>✋ Open Palm = Incorrect</div>
         </div>
       </div>
     </div>
