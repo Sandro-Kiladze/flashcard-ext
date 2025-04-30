@@ -16,6 +16,16 @@ export default function App() {
       .then(setCards);
   }, []);
 
+  const goToNextCard = () => {
+    setCurrentIndex(prev => (prev + 1) % cards.length);
+    setShowAnswer(false);
+  };
+
+  const goToPrevCard = () => {
+    setCurrentIndex(prev => (prev - 1 + cards.length) % cards.length);
+    setShowAnswer(false);
+  };
+
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
       <h1>Flashcards</h1>
@@ -26,34 +36,43 @@ export default function App() {
             background: '#f5f5f5', 
             padding: '20px', 
             borderRadius: '8px',
-            minHeight: '200px'
+            minHeight: '200px',
+            marginBottom: '20px'
           }}>
             <h2>{cards[currentIndex].front}</h2>
             {showAnswer && <p>{cards[currentIndex].back}</p>}
           </div>
           
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <button 
-              onClick={() => setShowAnswer(!showAnswer)}
-              style={{ padding: '10px 20px' }}
-            >
-              {showAnswer ? 'Hide Answer' : 'Show Answer'}
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <button 
+                onClick={() => setShowAnswer(!showAnswer)}
+                style={{ padding: '10px 20px', marginRight: '10px' }}
+              >
+                {showAnswer ? 'Hide Answer' : 'Show Answer'}
+              </button>
+            </div>
             
-            {cards.length > 1 && (
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={() => {
-                  setCurrentIndex((prev) => (prev + 1) % cards.length);
-                  setShowAnswer(false);
-                }}
+                onClick={goToPrevCard}
+                disabled={cards.length <= 1}
                 style={{ padding: '10px 20px' }}
               >
-                Next Card
+                Previous
               </button>
-            )}
+              
+              <button
+                onClick={goToNextCard}
+                disabled={cards.length <= 1}
+                style={{ padding: '10px 20px' }}
+              >
+                Next
+              </button>
+            </div>
           </div>
           
-          <p style={{ marginTop: '20px' }}>
+          <p style={{ marginTop: '20px', textAlign: 'center' }}>
             Card {currentIndex + 1} of {cards.length}
           </p>
         </>
