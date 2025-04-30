@@ -3,12 +3,17 @@ import cors from 'cors';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Server is running!');
+let flashcards: Array<{front: string, back: string}> = [];
+
+app.post('/flashcards', (req, res) => {
+  flashcards.push(req.body);
+  res.status(201).send();
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.get('/flashcards', (req, res) => {
+  res.json(flashcards);
 });
+
+app.listen(3000, () => console.log('Server running on port 3000'));
