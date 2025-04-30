@@ -1,4 +1,17 @@
 Flashcard Extension
+A browser extension that allows users to create flashcards by highlighting text on webpages, saving them and using a webapp to learn from them. You use Hand gestures to validate if the flashcard was easy or difficult.
+
+=============================================================================================================================
+
+How to install:
+Step 1: Make folder on Desktop, say Test.
+Step 2: Open folder in your code editor.
+Step 3: Open terminal.
+Step 4: type "git init" to initialzie repository.
+Step 5: type "git clone https://github.com/Sandro-Kiladze/flashcard-ext.git "
+Step 6: type "cd flashcard-ext"
+
+=============================================================================================================================
 
 How to operate:
 
@@ -29,3 +42,8 @@ Step 4:
 5) Refresh the page and you will see the flashcard.
 6) If you have multiple flashcards you can navigate with the Previous and Next buttons.
 7) Press "Show Answer" to see the copied text.
+
+Step 5: 
+1) Open camera
+2) Do a "Thumbs up gesture" if the flashcard was easy
+3) Do a "Thumbs down gesture" if the flashcard was hard.
