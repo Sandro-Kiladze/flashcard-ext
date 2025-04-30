@@ -20,19 +20,6 @@
   <textarea id="content" readonly></textarea>
   <button id="save">Save</button>
   
-  <script>
-    // Get the passed text
-    const params = new URLSearchParams(window.location.search);
-    document.getElementById('content').value = params.get('text') || '';
-    
-    // Save functionality
-    document.getElementById('save').addEventListener('click', () => {
-      chrome.runtime.sendMessage({
-        action: 'SAVE_FLASHCARD',
-        title: document.getElementById('title').value,
-        content: document.getElementById('content').value
-      }, () => window.close());
-    });
-  </script>
+  <script src="popup.js"></script>
 </body>
 </html>
