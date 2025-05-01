@@ -5,7 +5,12 @@ app.use(cors());
 app.use(express.json());
 let flashcards = [];
 app.post('/flashcards', (req, res) => {
-    flashcards.push(req.body);
+    const newFlashcard = {
+        front: req.body.front,
+        back: req.body.back,
+        label: null
+    };
+    flashcards.push(newFlashcard);
     res.status(201).send();
 });
 app.get('/flashcards', (req, res) => {
@@ -16,7 +21,12 @@ app.put('/flashcards/:index', (req, res) => {
     if (isNaN(index) || index < 0 || index >= flashcards.length) {
         return res.status(400).json({ error: 'Invalid flashcard index' });
     }
-    flashcards[index] = req.body;
+    const updatedFlashcard = {
+        front: req.body.front,
+        back: req.body.back,
+        label: req.body.label
+    };
+    flashcards[index] = updatedFlashcard;
     res.status(200).send();
 });
 app.listen(3000, () => console.log('Server running on port 3000'));
