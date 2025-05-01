@@ -16,12 +16,9 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
   const currentGesture = useRef<string | null>(null);
   const gestureStartTime = useRef<number | null>(null);
   const HOLD_DURATION = 800; // Reduced to 0.8 seconds
-  const STABLE_FRAMES_REQUIRED = 5;
   const lastStableGesture = useRef<string | null>(null);
   const gestureStableCount = useRef<number>(0);
   const currentGestureRef = useRef<string | null>(null);
-  const lastGestureTime = useRef<number>(Date.now());
-  const GRACE_PERIOD = 800; // 800ms grace period for small movements
 
   useEffect(() => {
     if (!isActive) {
@@ -116,7 +113,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
                 // New gesture detected
                 currentGestureRef.current = currentGesture;
                 gestureStartTime.current = currentTime;
-                setStatus(`Hold ${currentGesture.replace('_', ' ')}... (1.5s)`);
+                setStatus(`Hold ${currentGesture.replace('_', ' ')}... (0.8s)`);
                 
                 // Visual cue for the required gesture
                 drawGestureHint(currentGesture);
@@ -159,7 +156,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
                   
                   setTimeout(() => setStatus('Show your hand!'), 2000);
                 } else {
-                  setStatus(`Keep holding... ${(1.5 - (elapsed/1000)).toFixed(1)}s`);
+                  setStatus(`Keep holding... ${(0.8 - (elapsed/1000)).toFixed(1)}s`);
                 }
               }
             } else {
@@ -320,7 +317,7 @@ export default function GestureRecognition({ onGestureDetected, isActive }: Gest
         </div>
       </div>
       <div className="instructions">
-        <p>Hold your gesture for 1.5 seconds to confirm:</p>
+        <p>Hold your gesture for 0.8 seconds to confirm:</p>
         <div className="gesture-info">
           <div>👍 Thumbs Up = Easy</div>
           <div>👎 Thumbs Down = Hard</div>

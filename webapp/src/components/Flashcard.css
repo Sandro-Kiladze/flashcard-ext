@@ -1,0 +1,74 @@
+.flashcard {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin: 10px;
+  max-width: 600px;
+}
+
+.flashcard-content {
+  margin-bottom: 20px;
+}
+
+.flashcard-content h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.flashcard-content p {
+  margin: 0;
+  color: #666;
+}
+
+.flashcard-labels {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.label-button {
+  padding: 8px 16px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.label-button:hover {
+  background: #f5f5f5;
+}
+
+.label-button.active {
+  color: white;
+  border-color: transparent;
+}
+
+.label-button[data-label="easy"].active {
+  background-color: #4CAF50;
+}
+
+.label-button[data-label="hard"].active {
+  background-color: #F44336;
+}
+
+.label-button[data-label="incorrect"].active {
+  background-color: #2196F3;
+}
+
+.gesture-button {
+  padding: 8px 16px;
+  border: 2px solid #2196F3;
+  border-radius: 4px;
+  background: white;
+  color: #2196F3;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.gesture-button:hover {
+  background: #e3f2fd;
+} 
