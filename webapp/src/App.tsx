@@ -5,6 +5,7 @@ import './styles/gesture.css';
 interface Flashcard {
   front: string;
   back: string;
+  label: 'easy' | 'hard' | 'incorrect' | null;
 }
 
 export default function App() {
@@ -31,39 +32,54 @@ export default function App() {
     setIsGestureActive(false);
   };
 
+  const handleLabelChange = (label: Flashcard['label']) => {
+    if (!showAnswer) return;
+
+    const updatedCards = [...cards];
+    const currentCard = updatedCards[currentIndex];
+    
+    // If clicking the same label, remove it
+    if (currentCard.label === label) {
+      updatedCards[currentIndex] = {
+        ...currentCard,
+        label: null
+      };
+    } else {
+      // Otherwise, set the new label
+      updatedCards[currentIndex] = {
+        ...currentCard,
+        label
+      };
+    }
+
+    setCards(updatedCards);
+
+    // Save the updated flashcard to the server
+    fetch(`http://localhost:3000/flashcards/${currentIndex}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedCards[currentIndex])
+    }).catch(err => console.error('Error updating flashcard:', err));
+  };
+
   const handleGestureDetected = (gesture: string) => {
     if (!showAnswer) return;
 
-    let difficulty = '';
+    let label: Flashcard['label'] = null;
     switch (gesture) {
       case 'thumbs_up':
-        difficulty = 'Easy';
+        label = 'easy';
         break;
       case 'thumbs_down':
-        difficulty = 'Hard';
+        label = 'hard';
         break;
       case 'open_palm':
-        difficulty = 'Incorrect';
+        label = 'incorrect';
         break;
     }
 
-    if (difficulty) {
-      // Update the flashcard with the difficulty rating
-      const updatedCards = [...cards];
-      updatedCards[currentIndex] = {
-        ...updatedCards[currentIndex],
-        front: `${updatedCards[currentIndex].front} (${difficulty})`
-      };
-      setCards(updatedCards);
-
-      // Save the updated flashcard to the server
-      fetch(`http://localhost:3000/flashcards/${currentIndex}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedCards[currentIndex])
-      }).catch(err => console.error('Error updating flashcard:', err));
-
-      // Move to next card
+    if (label) {
+      handleLabelChange(label);
       goToNextCard();
     }
   };
@@ -82,6 +98,11 @@ export default function App() {
             marginBottom: '20px'
           }}>
             <h2>{cards[currentIndex].front}</h2>
+            {cards[currentIndex].label && (
+              <p style={{ color: '#666', fontStyle: 'italic' }}>
+                Label: {cards[currentIndex].label}
+              </p>
+            )}
             {showAnswer && <p>{cards[currentIndex].back}</p>}
           </div>
           
@@ -116,6 +137,41 @@ export default function App() {
               </button>
             </div>
           </div>
+          
+          {showAnswer && (
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'center' }}>
+              <button
+                onClick={() => handleLabelChange('easy')}
+                style={{ 
+                  padding: '10px 20px',
+                  backgroundColor: cards[currentIndex].label === 'easy' ? '#4CAF50' : '#f5f5f5',
+                  color: cards[currentIndex].label === 'easy' ? 'white' : 'black'
+                }}
+              >
+                Easy
+              </button>
+              <button
+                onClick={() => handleLabelChange('hard')}
+                style={{ 
+                  padding: '10px 20px',
+                  backgroundColor: cards[currentIndex].label === 'hard' ? '#f44336' : '#f5f5f5',
+                  color: cards[currentIndex].label === 'hard' ? 'white' : 'black'
+                }}
+              >
+                Hard
+              </button>
+              <button
+                onClick={() => handleLabelChange('incorrect')}
+                style={{ 
+                  padding: '10px 20px',
+                  backgroundColor: cards[currentIndex].label === 'incorrect' ? '#FFC107' : '#f5f5f5',
+                  color: cards[currentIndex].label === 'incorrect' ? 'black' : 'black'
+                }}
+              >
+                Incorrect
+              </button>
+            </div>
+          )}
           
           <p style={{ marginTop: '20px', textAlign: 'center' }}>
             Card {currentIndex + 1} of {cards.length}
