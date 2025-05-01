@@ -10,14 +10,18 @@ interface FlashcardProps {
 
 export default function FlashcardComponent({ flashcard, onLabelChange }: FlashcardProps) {
   const [isGestureActive, setIsGestureActive] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [currentLabel, setCurrentLabel] = useState<Flashcard['label']>(flashcard.label || null);
 
   const handleLabelChange = (newLabel: Flashcard['label']) => {
-    // Only allow changing to a different label or removing the current one
-    if (newLabel !== flashcard.label) {
-      onLabelChange(flashcard.id, newLabel);
-    } else {
-      // Clicking the current label removes it
+    // If clicking the same label, remove it
+    if (newLabel === currentLabel) {
+      setCurrentLabel(null);
       onLabelChange(flashcard.id, null);
+    } else {
+      // Otherwise, change to the new label
+      setCurrentLabel(newLabel);
+      onLabelChange(flashcard.id, newLabel);
     }
   };
 
@@ -30,49 +34,83 @@ export default function FlashcardComponent({ flashcard, onLabelChange }: Flashca
 
     const newLabel = labelMap[gesture as keyof typeof labelMap] || null;
     
-    // Only update if different from current label
-    if (newLabel !== flashcard.label) {
+    // If the new label is the same as current, remove it
+    if (newLabel === currentLabel) {
+      setCurrentLabel(null);
+      onLabelChange(flashcard.id, null);
+    } else {
+      // Otherwise, change to the new label
+      setCurrentLabel(newLabel);
       onLabelChange(flashcard.id, newLabel);
     }
+  };
+
+  const toggleAnswer = () => {
+    setShowAnswer(!showAnswer);
   };
 
   return (
     <div className="flashcard">
       <div className="flashcard-content">
         <h3>{flashcard.question}</h3>
-        <p>{flashcard.answer}</p>
-      </div>
-      
-      <div className="flashcard-labels">
-        {/* Manual label buttons */}
+        <p className="flashcard-prompt">Click the button below to reveal the answer</p>
+        
         <button 
-          className={`label-button ${flashcard.label === 'easy' ? 'active' : ''}`}
-          onClick={() => handleLabelChange('easy')}
-          data-label="easy"
+          className="show-answer-button"
+          onClick={toggleAnswer}
         >
-          👍 Easy
-        </button>
-        <button 
-          className={`label-button ${flashcard.label === 'hard' ? 'active' : ''}`}
-          onClick={() => handleLabelChange('hard')}
-          data-label="hard"
-        >
-          👎 Hard
-        </button>
-        <button 
-          className={`label-button ${flashcard.label === 'incorrect' ? 'active' : ''}`}
-          onClick={() => handleLabelChange('incorrect')}
-          data-label="incorrect"
-        >
-          ✋ Incorrect
+          {showAnswer ? 'Hide Answer' : 'Show Answer'}
         </button>
         
+        {showAnswer && (
+          <>
+            <div className="flashcard-answer-container">
+              <p className="flashcard-answer">{flashcard.answer}</p>
+            </div>
+            
+            {/* Ranking buttons - only shown when answer is visible */}
+            <div className="ranking-buttons">
+              <button 
+                className={`label-button ${currentLabel === 'easy' ? 'active' : ''}`}
+                onClick={() => handleLabelChange('easy')}
+                data-label="easy"
+              >
+                <span className="label-icon">👍</span> Easy
+              </button>
+              <button 
+                className={`label-button ${currentLabel === 'hard' ? 'active' : ''}`}
+                onClick={() => handleLabelChange('hard')}
+                data-label="hard"
+              >
+                <span className="label-icon">👎</span> Hard
+              </button>
+              <button 
+                className={`label-button ${currentLabel === 'incorrect' ? 'active' : ''}`}
+                onClick={() => handleLabelChange('incorrect')}
+                data-label="incorrect"
+              >
+                <span className="label-icon">✋</span> Incorrect
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      
+      <div className="flashcard-controls">
         {/* Gesture recognition toggle */}
         <button 
-          className="gesture-button"
+          className={`gesture-button ${isGestureActive ? 'active' : ''}`}
           onClick={() => setIsGestureActive(!isGestureActive)}
         >
-          {isGestureActive ? 'Stop Gesture Control' : 'Use Gestures'}
+          {isGestureActive ? (
+            <>
+              <span className="gesture-icon">✋</span> Stop Gesture Control
+            </>
+          ) : (
+            <>
+              <span className="gesture-icon">👆</span> Use Gestures
+            </>
+          )}
         </button>
       </div>
       
