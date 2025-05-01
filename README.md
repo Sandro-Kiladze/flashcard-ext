@@ -46,6 +46,8 @@ Step 4:
 7) Press "Show Answer" to see the copied text.
 
 Step 5: 
-1) Open camera
+1) Allow camera on browser
 2) Do a "Thumbs up gesture" if the flashcard was easy
 3) Do a "Thumbs down gesture" if the flashcard was hard.
+4) Do an "Open hand (palm facing camera) gesture" if the flashcard was incorrect.
+5) (Optional) You can click buttons to select easy,hard,incorrect if you dont want to use camera.
